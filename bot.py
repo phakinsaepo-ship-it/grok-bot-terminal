@@ -5,13 +5,13 @@ import os
 from datetime import datetime
 
 # ================== SETTINGS ==================
-STARTING_EQUITY = 133.70
-POSITION_SIZE_PCT = 0.27
-SLEEP_SECONDS = 6
+STARTING_EQUITY = 100
+POSITION_SIZE_PCT = 0.5
+SLEEP_SECONDS = 7
 
 # Telegram
-TELEGRAM_TOKEN = os.getenv("8994807254:AAExV0ydkO57ID9DupQuPXHYkXBCEtF2CT4")
-TELEGRAM_CHAT_ID = os.getenv("8658082295")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -67,12 +67,20 @@ class ScannerAgent:
                     price = float(p.get("priceUsd") or 0)
                     liq = float(p.get("liquidity", {}).get("usd") or 0)
                     vol = float(p.get("volume", {}).get("h24") or 0)
+                    
+                    # Get real price change data
+                    price_change = p.get("priceChange", {})
+                    change_h1 = float(price_change.get("h1") or 0)
+                    change_h24 = float(price_change.get("h24") or 0)
+
                     if price > 0 and liq > 10000:
                         tokens.append({
                             "symbol": "$" + symbol[:10],
                             "price": price,
                             "liquidity": liq,
-                            "volume": vol
+                            "volume": vol,
+                            "change_h1": change_h1,
+                            "change_h24": change_h24
                         })
                 except:
                     continue
@@ -95,7 +103,7 @@ class RugCheckAgent:
         if volume < 8000:
             state.log("RUG CHECK", f"FILTERED {symbol} → low volume")
             return False
-        if volume < liquidity * 0.15:
+        if volume < liquidity * 0.12:
             state.log("RUG CHECK", f"FILTERED {symbol} → weak volume")
             return False
 
@@ -115,32 +123,47 @@ class ExecutorAgent:
         state.open_trade = {
             "symbol": token["symbol"],
             "entry": token["price"],
-            "size": size_usd
+            "size": size_usd,
+            "change_h1": token.get("change_h1", 0),
+            "change_h24": token.get("change_h24", 0)
         }
         state.log("EXECUTOR", f"ENTER {token['symbol']} LONG")
         state.log("LOGGER", f"line #{state.line} enter {token['symbol']}")
         
-        # Send Telegram notification
-        send_telegram(f"<b>ENTER</b> {token['symbol']}\nSize: ${size_usd:,.2f}\nPrice: ${token['price']:.8f}")
+        send_telegram(f"<b>ENTER</b> {token['symbol']}\nSize: ${size_usd:,.2f}\n1h Change: {token.get('change_h1', 0):+.1f}%")
 
     def try_exit(self):
         if not state.open_trade:
             return
-        if random.random() < 0.38:
-            change = random.uniform(-0.23, 0.52)
+
+        # More realistic exit based on real data + some randomness
+        if random.random() < 0.42:
+            real_momentum = state.open_trade.get("change_h1", 0)
+            
+            # Base the simulated result more on real momentum
+            if real_momentum > 8:
+                change = random.uniform(0.08, 0.45)
+            elif real_momentum > 2:
+                change = random.uniform(-0.05, 0.28)
+            elif real_momentum < -10:
+                change = random.uniform(-0.35, -0.05)
+            else:
+                change = random.uniform(-0.22, 0.32)
+
             pnl = state.open_trade["size"] * change
             state.equity += pnl
             symbol = state.open_trade["symbol"]
+
             if pnl >= 0:
                 state.wins += 1
                 result = f"+${pnl:,.2f}"
             else:
                 state.losses += 1
                 result = f"-${abs(pnl):,.2f}"
+
             state.log("EXECUTOR", f"EXIT {symbol} {result}")
             state.log("EQUITY", f"Balance → ${state.equity:,.2f}")
             
-            # Send Telegram notification
             send_telegram(f"<b>EXIT</b> {symbol}\nResult: {result}\nBalance: ${state.equity:,.2f}")
             
             state.open_trade = None
@@ -164,12 +187,12 @@ logger = LoggerAgent()
 equity = EquityAgent()
 
 print("="*60, flush=True)
-print("  GROK BOT TERMINAL - WITH TELEGRAM", flush=True)
+print("  GROK BOT TERMINAL - IMPROVED SIMULATION", flush=True)
 print(f"  Starting Balance: ${state.equity:,.2f}", flush=True)
 print("="*60, flush=True)
 
-state.log("SYSTEM", "Bot started with Telegram notifications")
-send_telegram("<b>Grok Bot Terminal Started</b>\nPaper Trading Mode\nBalance: $133.70")
+state.log("SYSTEM", "Improved simulation started (still Paper Trading)")
+send_telegram("<b>Grok Bot Updated</b>\nNow using improved DexScreener simulation\nStill Paper Trading only")
 
 while True:
     state.cycle += 1
