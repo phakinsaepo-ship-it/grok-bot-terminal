@@ -1,12 +1,31 @@
 import requests
 import time
 import random
+import os
 from datetime import datetime
 
 # ================== SETTINGS ==================
 STARTING_EQUITY = 133.70
 POSITION_SIZE_PCT = 0.27
 SLEEP_SECONDS = 6
+
+# Telegram
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+def send_telegram(message):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        data = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        requests.post(url, data=data, timeout=10)
+    except:
+        pass
 
 class State:
     def __init__(self):
@@ -100,6 +119,9 @@ class ExecutorAgent:
         }
         state.log("EXECUTOR", f"ENTER {token['symbol']} LONG")
         state.log("LOGGER", f"line #{state.line} enter {token['symbol']}")
+        
+        # Send Telegram notification
+        send_telegram(f"<b>ENTER</b> {token['symbol']}\nSize: ${size_usd:,.2f}\nPrice: ${token['price']:.8f}")
 
     def try_exit(self):
         if not state.open_trade:
@@ -117,6 +139,10 @@ class ExecutorAgent:
                 result = f"-${abs(pnl):,.2f}"
             state.log("EXECUTOR", f"EXIT {symbol} {result}")
             state.log("EQUITY", f"Balance → ${state.equity:,.2f}")
+            
+            # Send Telegram notification
+            send_telegram(f"<b>EXIT</b> {symbol}\nResult: {result}\nBalance: ${state.equity:,.2f}")
+            
             state.open_trade = None
 
 class LoggerAgent:
@@ -138,11 +164,12 @@ logger = LoggerAgent()
 equity = EquityAgent()
 
 print("="*60, flush=True)
-print("  GROK BOT TERMINAL - RAILWAY NON-STOP MODE", flush=True)
+print("  GROK BOT TERMINAL - WITH TELEGRAM", flush=True)
 print(f"  Starting Balance: ${state.equity:,.2f}", flush=True)
 print("="*60, flush=True)
 
-state.log("SYSTEM", "Bot started on Railway (Paper Trading Only)")
+state.log("SYSTEM", "Bot started with Telegram notifications")
+send_telegram("<b>Grok Bot Terminal Started</b>\nPaper Trading Mode\nBalance: $133.70")
 
 while True:
     state.cycle += 1
